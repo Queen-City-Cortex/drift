@@ -1,0 +1,6 @@
+{
+  "name": "drift",
+  "version": "0.1.0",
+  "description": "Keep a personal fork rebased on upstream releases, carrying agent-made mods.",
+  "author": { "name": "jkhoffman" }
+}
