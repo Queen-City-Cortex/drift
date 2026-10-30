@@ -46,3 +46,24 @@ test('moving an upstream test with a small edit still counts as rewriting it', (
   assert.deepEqual(f.rewritesTests, ['test/a.test.js'])
   assert.deepEqual(f.overrides.map((o) => o.file), ['test/a.test.js'])
 })
+
+test('a quoted check command round-trips exactly', () => {
+  const i = { mod: '002', request: 'r', check: '"./check behavior.sh"', adopted: false }
+  assert.equal(parseIntent(formatIntent(i), '002').check, '"./check behavior.sh"')
+})
+
+test('flags see upstream files with non-ASCII names', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'drift-flags-'))
+  const run = (cmd: string) => execFileSync('sh', ['-c', cmd], { cwd: dir, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } }).trim()
+  run('git init -q -b main && mkdir test')
+  writeFileSync(join(dir, 'test/é.test.js'), 'a\nb\n')
+  run('git add -A && git commit -qm v1')
+  const from = run('git rev-parse HEAD')
+  writeFileSync(join(dir, 'test/é.test.js'), 'a\nb2\n')
+  run('git commit -qam v2')
+  const to = run('git rev-parse HEAD')
+  writeFileSync(join(dir, 'test/é.test.js'), 'a\n')
+  run('git commit -qam mod')
+  const f = modFlags(dir, run('git rev-parse HEAD'), from, to)
+  assert.deepEqual(f.rewritesTests, ['test/é.test.js'])
+})

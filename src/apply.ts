@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CONFIG_PATH, type Config } from './config.ts'
-import { DriftError, git, lines, tryGit } from './git.ts'
+import { DriftError, git, paths, tryGit } from './git.ts'
 import { intentPath } from './mods.ts'
 import { type Repo } from './repo.ts'
 import { type Op, type SyncState, saveState } from './state.ts'
@@ -22,7 +22,7 @@ export interface Applied {
   mods: { mod: string; outcome: string }[]
 }
 
-const unmerged = (wt: string) => lines(git(wt, ['diff', '--name-only', '--diff-filter=U']))
+const unmerged = (wt: string) => paths(wt, ['diff', '--name-only', '--diff-filter=U'])
 
 /** Snapshot the working tree, conflict markers and all, without touching the real index. */
 function snapshotTree(repo: Repo, wt: string): string {
@@ -68,7 +68,7 @@ function commitOp(state: SyncState, wt: string, op: Op, resolvedByAgent = false)
 }
 
 function isAbsorbed(wt: string): boolean {
-  return lines(git(wt, ['diff', '--cached', '--name-only', 'HEAD'])).every((f) => f.startsWith('.drift/'))
+  return paths(wt, ['diff', '--cached', '--name-only', 'HEAD']).every((f) => f.startsWith('.drift/'))
 }
 
 /** Runs the queue until it is empty or a pick conflicts. */

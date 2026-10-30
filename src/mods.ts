@@ -33,7 +33,7 @@ export function parseIntent(text: string, mod: string): Intent {
   const fields: Record<string, string> = {}
   for (const line of m[1].split('\n')) {
     const kv = line.match(/^(\w+):\s*(.*)$/)
-    if (kv) fields[kv[1]] = kv[2].replace(/^"(.*)"$/, '$1')
+    if (kv) fields[kv[1]] = kv[2]
   }
   const body = m[2].replace(/^[\s\S]*?## Request\s*\n/, '')
   const request = body
@@ -42,6 +42,7 @@ export function parseIntent(text: string, mod: string): Intent {
     .map((l) => l.replace(/^> ?/, ''))
     .join('\n')
     .trim()
+  // `check` is a literal shell command; quotes in it belong to the shell.
   return { mod, request, check: fields.check || 'build', adopted: fields.adopted === 'true' }
 }
 

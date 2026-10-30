@@ -48,6 +48,11 @@ export function tryGit(cwd: string, args: string[]): { ok: boolean; out: string 
   return { ok: r.status === 0, out: `${r.stdout ?? ''}${r.stderr ?? ''}`.trim() }
 }
 
+/** Runs a git command that lists paths, NUL-delimited so no path is quoted or escaped. */
+export function paths(cwd: string, args: string[]): string[] {
+  return git(cwd, [args[0], '-z', ...args.slice(1)]).split('\0').filter(Boolean)
+}
+
 export function lines(s: string): string[] {
   return s.split('\n').filter(Boolean)
 }

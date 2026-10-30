@@ -4,7 +4,7 @@ import { resolveCurrent, runQueue, savePatch } from './apply.ts'
 import { type Config, readConfig, writeConfig } from './config.ts'
 import { runShell } from './exec.ts'
 import { type Flags, flagged, modFlags } from './flags.ts'
-import { DriftError, git, isAncestor, isClean, lines, revParse, tryGit } from './git.ts'
+import { DriftError, git, paths, isAncestor, isClean, lines, revParse, tryGit } from './git.ts'
 import { type Intent, intentPath, isUnverified, readIntent, writeIntent } from './mods.ts'
 import {
   HEAD_NS,
@@ -116,7 +116,7 @@ function stackJson(repo: Repo) {
       }),
     unadopted: stack
       .filter((c) => !c.mod && !c.init)
-      .map((c) => ({ sha: c.sha, subject: c.subject, files: lines(git(repo.root, ['diff-tree', '--no-commit-id', '--name-only', '-r', c.sha])) })),
+      .map((c) => ({ sha: c.sha, subject: c.subject, files: paths(repo.root, ['diff-tree', '--no-commit-id', '--name-only', '-r', c.sha]) })),
   }
 }
 
@@ -176,7 +176,7 @@ export function modAmend(mod: string, request?: string, check?: string): Result 
   ])
   // The rewritten stack must contain exactly what the checkout had, apart from the intent file.
   const expected = fix ?? 'HEAD'
-  const diff = lines(git(repo.root, ['diff', '--name-only', expected, tip])).filter((f) => f !== intentPath(mod))
+  const diff = paths(repo.root, ['diff', '--name-only', expected, tip]).filter((f) => f !== intentPath(mod))
   if (diff.length) throw new DriftError('amending would change other files; nothing was changed', { files: diff })
   git(repo.root, ['reset', '--quiet', '--hard', tip])
   return ok({ status: 'amended', mod, sha: git(repo.root, ['rev-parse', 'HEAD']), intent_path: intentPath(mod) })
