@@ -41,11 +41,11 @@ export function fetchUpstream(cwd: string, config: Config): void {
     const head = defaultBranch(cwd, config.remote)
     if (head) specs.push(`+refs/heads/${head}:${HEAD_NS}/${head}`)
   }
-  git(cwd, ['fetch', '--no-tags', '--quiet', config.remote, ...specs])
+  git(cwd, ['fetch', '--no-tags', '--quiet', '--', config.remote, ...specs])
 }
 
 export function defaultBranch(cwd: string, remote: string): string | undefined {
-  const r = tryGit(cwd, ['ls-remote', '--symref', remote, 'HEAD'])
+  const r = tryGit(cwd, ['ls-remote', '--symref', '--', remote, 'HEAD'])
   return r.out.match(/^ref: refs\/heads\/(\S+)\s+HEAD/m)?.[1]
 }
 

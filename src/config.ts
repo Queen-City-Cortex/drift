@@ -48,6 +48,10 @@ export function readConfig(root: string): Config {
   const c = JSON.parse(readFileSync(p, 'utf8')) as Config
   c.remote ??= 'upstream'
   c.track ??= 'tags'
+  // The config is committed, so treat it as untrusted wherever it reaches git's argument parser.
+  const name = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
+  if (!name.test(c.remote)) throw new DriftError(`invalid remote name in .drift/config: ${c.remote}`)
+  if (!name.test(c.track) || c.track.includes('..')) throw new DriftError(`invalid track in .drift/config: ${c.track}`)
   c.unattended = { ...({ resolved_unverified: 'hold', flagged: 'hold' } as const), ...c.unattended }
   return c
 }

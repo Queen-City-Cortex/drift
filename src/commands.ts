@@ -65,8 +65,9 @@ export function init(o: InitOptions): Result {
   if (tryGit(repo.root, ['cat-file', '-e', 'HEAD:.drift/config']).ok) throw new DriftError('already a drift repo')
   requireClean(repo)
   const remote = o.remote ?? 'upstream'
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(remote)) throw new DriftError(`invalid remote name: ${remote}`)
   const existing = tryGit(repo.root, ['remote', 'get-url', remote])
-  if (!existing.ok) git(repo.root, ['remote', 'add', remote, o.upstream])
+  if (!existing.ok) git(repo.root, ['remote', 'add', '--', remote, o.upstream])
   else if (existing.out !== o.upstream) throw new DriftError(`remote ${remote} points at ${existing.out}; pass --remote <name>`)
 
   const config: Config = {

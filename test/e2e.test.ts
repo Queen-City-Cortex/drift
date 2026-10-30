@@ -352,3 +352,17 @@ test('sync start never deletes a worktree path drift does not own', () => {
   assert.equal(drift(s.fork, ['config', 'worktree', '.']).code, 0)
   assert.match(drift(s.fork, ['sync', 'start'], s.env).json.error, /inside the repo/)
 })
+
+test('an option-like remote in a committed config is rejected before git sees it', () => {
+  const s = scenario()
+  initAndAdopt(s, CHECK)
+  const marker = join(s.root, 'pwned')
+  const cfg = JSON.parse(readFileSync(join(s.fork, '.drift/config'), 'utf8'))
+  cfg.remote = `--upload-pack=touch ${marker}`
+  writeFileSync(join(s.fork, '.drift/config'), JSON.stringify(cfg))
+  sh(s.fork, 'git commit -qam evil')
+  const r = drift(s.fork, ['status'])
+  assert.equal(r.code, 1)
+  assert.match(r.json.error, /invalid remote name/)
+  assert.ok(!existsSync(marker))
+})
