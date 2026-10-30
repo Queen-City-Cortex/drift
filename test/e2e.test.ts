@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -423,3 +423,26 @@ test('report names the check that ran, and says when the agent changed it', () =
   assert.match(report, /Check `true` passed/)
 })
 
+
+test('sync start never removes a worktree drift did not create', () => {
+  const s = scenario()
+  initAndAdopt(s, CHECK)
+  const other = join(s.root, 'other')
+  sh(s.fork, `git worktree add -q -b other ${other} HEAD`)
+  write(other, 'important.txt', 'x\n')
+  assert.equal(drift(s.fork, ['config', 'worktree', other]).code, 0)
+  const r = drift(s.fork, ['sync', 'start'], s.env)
+  assert.equal(r.code, 1)
+  assert.match(r.json.error, /not a drift worktree/)
+  assert.ok(existsSync(join(other, 'important.txt')))
+})
+
+test('a stale sync worktree left by a crash is reclaimed', () => {
+  const s = scenario()
+  initAndAdopt(s, CHECK)
+  const start = drift(s.fork, ['sync', 'start'], s.env)
+  rmSync(join(s.fork, '.git/drift/sync.json'))
+  const again = drift(s.fork, ['sync', 'start'], s.env)
+  assert.equal(again.code, 2, JSON.stringify(again.json))
+  assert.equal(again.json.worktree, start.json.worktree)
+})

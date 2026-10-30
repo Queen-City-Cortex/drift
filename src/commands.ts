@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'
 import { resolveCurrent, runQueue, savePatch } from './apply.ts'
 import { type Config, readConfig, writeConfig } from './config.ts'
@@ -254,6 +254,7 @@ export function syncStart(o: StartOptions): Result {
   const wt = worktreePath(repo, config)
   claimWorktree(repo, wt)
   git(repo.root, ['worktree', 'add', '--quiet', '--detach', wt, to.sha])
+  writeFileSync(join(git(wt, ['rev-parse', '--absolute-git-dir']), DRIFT_MARKER), '')
   const checkpoint = git(repo.root, ['rev-parse', 'HEAD'])
   git(repo.root, ['update-ref', 'refs/drift/checkpoint', checkpoint])
 
@@ -294,9 +295,13 @@ function claimWorktree(repo: Repo, wt: string) {
   const ours = git(repo.root, ['worktree', 'list', '--porcelain'])
     .split('\n')
     .some((l) => l === `worktree ${wt}`)
-  if (!ours) throw new DriftError(`worktree path ${wt} already exists and is not a drift worktree; move it or set worktree in config`)
+  const marked = ours && existsSync(join(tryGit(wt, ['rev-parse', '--absolute-git-dir']).out, DRIFT_MARKER))
+  if (!marked) throw new DriftError(`worktree path ${wt} already exists and is not a drift worktree; move it or set worktree in config`)
   git(repo.root, ['worktree', 'remove', '--force', wt])
 }
+
+/** Written into the admin dir of worktrees drift creates, so it never removes anyone else's. */
+const DRIFT_MARKER = 'drift-sync'
 
 function queueResult(r: ReturnType<typeof runQueue>): Result {
   return { code: r.status === 'conflict' ? 2 : 0, json: { ...r } }
