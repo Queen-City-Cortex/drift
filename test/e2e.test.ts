@@ -366,3 +366,16 @@ test('an option-like remote in a committed config is rejected before git sees it
   assert.match(r.json.error, /invalid remote name/)
   assert.ok(!existsSync(marker))
 })
+
+test('verify refuses uncommitted edits in the sync worktree', () => {
+  const s = scenario()
+  initAndAdopt(s, CHECK)
+  const start = drift(s.fork, ['sync', 'start'], s.env)
+  write(start.json.worktree, 'greet.js', GREET_V11)
+  write(start.json.worktree, 'test/greet.test.js', TEST('Hello, a!'))
+  drift(s.fork, ['sync', 'continue'], s.env)
+  resolve(start.json.worktree)
+  const v = drift(s.fork, ['verify'], s.env)
+  assert.equal(v.code, 1)
+  assert.match(v.json.error, /sync fixup/)
+})

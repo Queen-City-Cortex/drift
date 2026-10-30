@@ -344,6 +344,8 @@ export async function verifyCmd(): Promise<Result> {
     return { code: r.green ? 0 : 1, json: { ...r } }
   }
   if (state.status !== 'applied') throw new DriftError(`cannot verify while the sync is ${state.status}`)
+  // A green result is bound to a commit, so the files it tested must be exactly that commit.
+  if (!isClean(state.worktree)) throw new DriftError('the sync worktree has uncommitted changes; fold them into a mod with drift sync fixup NNN, then verify')
   const config = readConfig(state.worktree)
   state.verified = await verify(state.worktree, config, join(repo.stateDir, 'logs'), state.attempts)
   saveState(repo, state)
