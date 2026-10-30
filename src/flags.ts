@@ -37,11 +37,12 @@ export function modFlags(cwd: string, sha: string, from: string, to: string, tes
   const parent = `${sha}^`
   const released = new Set(lines(git(cwd, ['rev-list', `${from}..${to}`])))
   const modOwned = new Set(lines(git(cwd, ['rev-list', `${to}..${parent}`])))
-  const tests = new Set(paths(cwd, ['diff', '--name-only', '--no-renames', '--diff-filter=MD', parent, sha, '--', ...testSpecs]))
+  const tests = new Set(paths(cwd, ['diff', '--name-only', '--no-renames', '--diff-filter=MDT', parent, sha, '--', ...testSpecs]))
   const flags: Flags = { overrides: [], rewritesTests: [] }
 
   // --no-renames throughout: a moved file must count as deleting every line it had.
-  for (const file of paths(cwd, ['diff', '--name-only', '--no-renames', '--diff-filter=MD', parent, sha])) {
+  // T too: a file replaced by a symlink loses every line it had.
+  for (const file of paths(cwd, ['diff', '--name-only', '--no-renames', '--diff-filter=MDT', parent, sha])) {
     if (file.startsWith('.drift/')) continue
     if (!tryGit(cwd, ['cat-file', '-e', `${to}:${file}`]).ok) continue
     const commits = removedRanges(cwd, parent, sha, file).flatMap((r) => blameCommits(cwd, parent, file, r))
