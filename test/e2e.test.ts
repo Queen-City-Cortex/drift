@@ -397,3 +397,13 @@ test('accept installs with the held commit config, not edits left in the worktre
   assert.ok(!existsSync(join(s.root, 'rogue')))
   assert.ok(existsSync(join(s.install, 'greet.js')))
 })
+
+test('mod commit refuses a multi-line check and commits nothing', () => {
+  const s = scenario()
+  initAndAdopt(s, CHECK)
+  const head0 = sh(s.fork, 'git rev-parse HEAD')
+  write(s.fork, 'x.txt', 'x\n')
+  const r = drift(s.fork, ['mod', 'commit', '--request', 'x', '--check', 'true\nfalse'])
+  assert.equal(r.code, 1)
+  assert.equal(sh(s.fork, 'git rev-parse HEAD'), head0)
+})

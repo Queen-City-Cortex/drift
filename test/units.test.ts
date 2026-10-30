@@ -17,3 +17,7 @@ test('prerelease tags are recognized', () => {
   for (const t of ['v1.2.0-rc.1', '2.0.0-beta', 'v3.0.0-next.4', 'v1.0rc1']) assert.ok(isPrerelease(t), t)
   for (const t of ['v1.2.0', '23.1.1', 'release-2026-10']) assert.ok(!isPrerelease(t), t)
 })
+
+test('a multi-line check is refused rather than truncated', () => {
+  assert.throws(() => formatIntent({ mod: '001', request: 'r', check: 'true\nfalse' }), /one line/)
+})

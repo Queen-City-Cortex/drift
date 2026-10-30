@@ -15,7 +15,9 @@ export interface Intent {
 export const intentPath = (mod: string) => `.drift/mods/${mod}.md`
 
 export function formatIntent(i: Intent): string {
-  const front = [`mod: "${i.mod}"`, `check: ${i.check}`]
+  // Front matter holds one line; a silently truncated check would pass while proving nothing.
+  if (/[\r\n]/.test(i.check.trim())) throw new DriftError('check must be one line; join commands with && or put them in a script')
+  const front = [`mod: "${i.mod}"`, `check: ${i.check.trim()}`]
   if (i.adopted) front.push('adopted: true')
   const quoted = i.request
     .trim()
