@@ -14,6 +14,8 @@ export interface ModReport {
   request?: string
   adopted?: boolean
   check?: string
+  /** The check before this sync, when the agent changed it. */
+  originalCheck?: string
   outcome: string
   conflicted: string[]
   agentTouched: boolean
@@ -41,7 +43,8 @@ export function modReports(repo: Repo, state: SyncState, flags: Record<string, F
       subject: m.subject,
       request: intent?.request,
       adopted: intent?.adopted,
-      check: intent?.check,
+      check: check?.check ?? intent?.check,
+      ...(check && intent && check.check !== intent.check && { originalCheck: intent.check }),
       outcome: m.outcome,
       conflicted: m.conflicted,
       agentTouched: m.agentTouched,
@@ -60,6 +63,7 @@ function outcomeLine(m: ModReport): string {
   if (m.outcome === 'absorbed') parts.push('Upstream now does this; the mod was dropped (kept at `refs/drift/absorbed/' + m.mod + '`).')
   if (m.outcome === 'dropped') parts.push('Left out with `--without` (kept at `refs/drift/dropped/' + m.mod + '`).')
   if (m.agentTouched && m.outcome !== 'resolved') parts.push('The agent edited it after a failed check.')
+  if (m.originalCheck) parts.push(`The agent changed its check from \`${m.originalCheck}\`.`)
   if (m.checkOk !== undefined)
     parts.push(m.checkOk ? (m.unverified ? `Check \`${m.check}\` passed, but it only proves the app builds or starts.` : `Check \`${m.check}\` passed.`) : `Check \`${m.check}\` failed.`)
   return parts.join(' ')

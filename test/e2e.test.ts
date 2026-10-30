@@ -407,3 +407,19 @@ test('mod commit refuses a multi-line check and commits nothing', () => {
   assert.equal(r.code, 1)
   assert.equal(sh(s.fork, 'git rev-parse HEAD'), head0)
 })
+
+test('report names the check that ran, and says when the agent changed it', () => {
+  const s = scenario()
+  initAndAdopt(s, CHECK)
+  const start = drift(s.fork, ['sync', 'start'], s.env)
+  resolve(start.json.worktree)
+  const intent = join(start.json.worktree, '.drift/mods/001.md')
+  writeFileSync(intent, readFileSync(intent, 'utf8').replace(/^check: .*$/m, 'check: true'))
+  drift(s.fork, ['sync', 'continue'], s.env)
+  assert.equal(drift(s.fork, ['verify'], s.env).code, 0)
+  const f = drift(s.fork, ['sync', 'finish'], s.env)
+  const report = readFileSync(f.json.report, 'utf8')
+  assert.match(report, /changed its check from `node -e/)
+  assert.match(report, /Check `true` passed/)
+})
+

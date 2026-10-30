@@ -15,7 +15,7 @@ interface Range {
 
 /** Line ranges of `parent` that the commit deletes or replaces. */
 function removedRanges(cwd: string, parent: string, sha: string, file: string): Range[] {
-  const diff = git(cwd, ['diff', '-U0', '--no-color', '--no-ext-diff', parent, sha, '--', file])
+  const diff = git(cwd, ['diff', '-U0', '--no-color', '--no-ext-diff', '--no-renames', parent, sha, '--', file])
   const out: Range[] = []
   for (const m of diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/gm)) {
     const count = m[2] === undefined ? 1 : parseInt(m[2], 10)
@@ -37,10 +37,11 @@ export function modFlags(cwd: string, sha: string, from: string, to: string, tes
   const parent = `${sha}^`
   const released = new Set(lines(git(cwd, ['rev-list', `${from}..${to}`])))
   const modOwned = new Set(lines(git(cwd, ['rev-list', `${to}..${parent}`])))
-  const tests = new Set(lines(git(cwd, ['diff', '--name-only', '--diff-filter=MD', parent, sha, '--', ...testSpecs])))
+  const tests = new Set(lines(git(cwd, ['diff', '--name-only', '--no-renames', '--diff-filter=MD', parent, sha, '--', ...testSpecs])))
   const flags: Flags = { overrides: [], rewritesTests: [] }
 
-  for (const file of lines(git(cwd, ['diff', '--name-only', '--diff-filter=MD', parent, sha]))) {
+  // --no-renames throughout: a moved file must count as deleting every line it had.
+  for (const file of lines(git(cwd, ['diff', '--name-only', '--no-renames', '--diff-filter=MD', parent, sha]))) {
     if (file.startsWith('.drift/')) continue
     if (!tryGit(cwd, ['cat-file', '-e', `${to}:${file}`]).ok) continue
     const commits = removedRanges(cwd, parent, sha, file).flatMap((r) => blameCommits(cwd, parent, file, r))
