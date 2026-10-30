@@ -324,11 +324,12 @@ export function syncFixup(mod: string): Result {
   const rec = state.mods[mod]
   if (!rec) throw new DriftError(`no mod ${mod} in this sync`)
   if ((state.attempts[mod] ?? 0) > MAX_ATTEMPTS) throw new DriftError(`mod ${mod} has used its ${MAX_ATTEMPTS} attempts; abort the sync`)
+  git(wt, ['add', '-A'])
+  if (!git(wt, ['diff', '--cached', '--name-only'])) throw new DriftError('no changes in the sync worktree to fold in')
+  if (rec.outcome === 'absorbed') return restoreAbsorbed(repo, state, mod)
   const stack = listStack(wt)
   const i = stack.findIndex((c) => c.mod === mod)
   if (i < 0) throw new DriftError(`mod ${mod} is not in the rebuilt stack`)
-  git(wt, ['add', '-A'])
-  if (!git(wt, ['diff', '--cached', '--name-only'])) throw new DriftError('no changes in the sync worktree to fold in')
   git(wt, ['commit', '--quiet', '--no-verify', '-m', `drift fixup ${mod}`])
   const fix = git(wt, ['rev-parse', 'HEAD'])
   rec.agentTouched = true
@@ -339,6 +340,23 @@ export function syncFixup(mod: string): Result {
   state.verified = undefined
   saveState(repo, state)
   return queueResult(runQueue(repo, state))
+}
+
+/** Upstream contained the mod's patch but not its behavior: bring it back on top with the agent's fix. */
+function restoreAbsorbed(repo: Repo, state: SyncState, mod: string): Result {
+  const wt = state.worktree
+  const rec = state.mods[mod]
+  const original = `refs/drift/absorbed/${mod}`
+  const fix = git(wt, ['diff', '--cached', '--no-color'])
+  git(wt, ['checkout', original, '--', intentPath(mod)])
+  git(wt, ['commit', '--quiet', '--no-verify', '-C', revParse(wt, original)])
+  tryGit(wt, ['update-ref', '-d', original])
+  rec.outcome = 'resolved'
+  rec.agentTouched = true
+  rec.agentPatches.push(savePatch(repo, `${mod}-fixup-${rec.agentPatches.length + 1}`, fix))
+  state.verified = undefined
+  saveState(repo, state)
+  return { code: 0, json: { status: 'applied', next: 'verify', restored: mod } }
 }
 
 export async function verifyCmd(): Promise<Result> {
@@ -352,7 +370,8 @@ export async function verifyCmd(): Promise<Result> {
   // A green result is bound to a commit, so the files it tested must be exactly that commit.
   if (!isClean(state.worktree)) throw new DriftError('the sync worktree has uncommitted changes; fold them into a mod with drift sync fixup NNN, then verify')
   const config = readConfig(state.worktree)
-  state.verified = await verify(state.worktree, config, join(repo.stateDir, 'logs'), state.attempts)
+  const absorbed = Object.values(state.mods).filter((m) => m.outcome === 'absorbed').map((m) => m.mod)
+  state.verified = await verify(state.worktree, config, join(repo.stateDir, 'logs'), state.attempts, absorbed)
   saveState(repo, state)
   const exhausted = [state.verified.build, state.verified.test, ...state.verified.mods].filter((c) => c && !c.ok && c.exhausted).map((c) => c!.name)
   return {

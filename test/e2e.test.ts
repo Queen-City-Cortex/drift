@@ -226,6 +226,48 @@ test('a mod upstream already contains is reported as absorbed', () => {
   assert.match(readFileSync(f.json.report, 'utf8'), /Upstream now does this/)
 })
 
+test('an absorbed mod whose check fails is restored by fixup', () => {
+  const s = scenario()
+  initAndAdopt(s, CHECK)
+  write(s.fork, 'flag.js', 'module.exports = 1\n')
+  const check = `node -e "process.exit(require('fs').existsSync('flag.off') ? 1 : 0)"`
+  assert.equal(drift(s.fork, ['mod', 'commit', '--request', 'Turn the flag on.', '--check', check, '-m', 'Add flag']).json.mod, '003')
+  // Upstream ships the same file, but also switches the flag off.
+  write(s.up, 'flag.js', 'module.exports = 1\n')
+  write(s.up, 'flag.off', '')
+  sh(s.up, 'git add -A && git commit -qm "add flag, off" && git tag v1.3.0')
+  const start = drift(s.fork, ['sync', 'start', '--to', 'v1.3.0'], s.env)
+  resolve(start.json.worktree)
+  const cont = drift(s.fork, ['sync', 'continue'], s.env)
+  assert.equal(cont.json.mods.find((m: any) => m.mod === '003').outcome, 'absorbed')
+  const red = drift(s.fork, ['verify'], s.env)
+  assert.equal(red.code, 1, 'an absorbed mod still has to pass its check')
+  assert.equal(red.json.mods.find((m: any) => m.name === '003').ok, false)
+
+  rmSync(join(start.json.worktree, 'flag.off'))
+  const fx = drift(s.fork, ['sync', 'fixup', '003'], s.env)
+  assert.equal(fx.code, 0, JSON.stringify(fx.json))
+  assert.equal(drift(s.fork, ['verify'], s.env).code, 0)
+  const f = drift(s.fork, ['sync', 'finish'], s.env)
+  assert.equal(f.code, 0, JSON.stringify(f.json))
+  assert.match(sh(s.fork, 'git log -1 --format=%B'), /Mod: 003/)
+  assert.ok(existsSync(join(s.fork, '.drift/mods/003.md')))
+  assert.ok(!existsSync(join(s.fork, 'flag.off')))
+})
+
+test('a mod that only changes drift config is not absorbed', () => {
+  const s = scenario()
+  initAndAdopt(s, CHECK)
+  const p = join(s.fork, '.drift/config')
+  write(s.fork, '.drift/config', readFileSync(p, 'utf8').replace(/\n}\n$/, ',\n  "launchWait": 9\n}\n'))
+  assert.equal(drift(s.fork, ['mod', 'commit', '--request', 'Wait longer on launch.', '--check', 'build', '-m', 'Wait longer']).json.mod, '003')
+  const start = drift(s.fork, ['sync', 'start'], s.env)
+  resolve(start.json.worktree)
+  const cont = drift(s.fork, ['sync', 'continue'], s.env)
+  assert.equal(cont.json.mods.find((m: any) => m.mod === '003').outcome, 'clean')
+  assert.match(readFileSync(join(start.json.worktree, '.drift/config'), 'utf8'), /"launchWait": 9/)
+})
+
 test('mod amend folds a refinement into the existing mod', () => {
   const s = scenario()
   initAndAdopt(s, CHECK)

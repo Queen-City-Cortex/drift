@@ -21,7 +21,7 @@ drift config <key> <value>
 drift status
 drift sync start [--to <tag>] [--without NNN,...] [--unattended]
 drift sync continue                                      # after resolving a conflict
-drift sync fixup <NNN>                                   # fold worktree edits into mod NNN
+drift sync fixup <NNN>                                   # fold worktree edits into mod NNN (restores it if absorbed)
 drift verify                                             # build, upstream tests, each mod's check
 drift sync finish [--unattended]
 drift sync accept | discard                              # for a held sync

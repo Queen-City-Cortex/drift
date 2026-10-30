@@ -55,9 +55,10 @@ function commitOp(state: SyncState, wt: string, op: Op, resolvedByAgent = false)
   }
   if (op.squash) {
     git(wt, ['commit', '--quiet', '--no-verify', '--allow-empty', '--amend', '--no-edit'])
-  } else if (op.mod && !resolvedByAgent && isAbsorbed(wt)) {
+  } else if (op.mod && !resolvedByAgent && isAbsorbed(wt, op.mod)) {
     // Upstream already does what this mod did: only its intent file would remain.
     // Never inferred from an agent's resolution, which may simply have lost the mod.
+    // Verify still runs its check; `sync fixup` restores it if that fails.
     git(wt, ['reset', '--quiet', '--hard', 'HEAD'])
     git(wt, ['update-ref', `refs/drift/absorbed/${op.mod}`, op.sha])
     state.mods[op.mod].outcome = 'absorbed'
@@ -67,8 +68,8 @@ function commitOp(state: SyncState, wt: string, op: Op, resolvedByAgent = false)
   tryGit(wt, ['cherry-pick', '--quit'])
 }
 
-function isAbsorbed(wt: string): boolean {
-  return paths(wt, ['diff', '--cached', '--name-only', 'HEAD']).every((f) => f.startsWith('.drift/'))
+function isAbsorbed(wt: string, mod: string): boolean {
+  return paths(wt, ['diff', '--cached', '--name-only', 'HEAD']).every((f) => f === intentPath(mod))
 }
 
 /** Runs the queue until it is empty or a pick conflicts. */

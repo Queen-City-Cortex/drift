@@ -17,7 +17,7 @@ The check is a command that fails without the mod. Prefer a test you add. For an
 
 On conflict, resolve to satisfy the mod's request against the new upstream, not to preserve the old diff.
 
-When verify fails, fix it in the worktree and run `drift sync fixup NNN` for the mod at fault. When verify says `next: abort`, run `drift sync abort`. Abort is always safe.
+When verify fails, fix it in the worktree and run `drift sync fixup NNN` for the mod at fault (for an absorbed mod, this restores it with your fix). When verify says `next: abort`, run `drift sync abort`. Abort is always safe.
 
 When running unattended, pass `--unattended`. Exit 3 means the sync is held: stop and point the user at the report. They decide with `drift sync accept` or `drift sync discard`.
 
