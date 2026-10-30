@@ -415,11 +415,11 @@ export function syncFinish(unattended: boolean): Result {
     const path = report(repo, state, 'held', flags, holds)
     return { code: 3, json: { status: 'held', pending: tip, holds, report: path, worktree: state.worktree } }
   }
-  return land(repo, state, config, flags, tip)
+  return land(repo, state, flags, tip)
 }
 
 /** Moves the user's branch to the verified stack, builds and installs; restores everything on failure. */
-function land(repo: Repo, state: SyncState, config: Config, flags: Record<string, Flags>, tip: string): Result {
+function land(repo: Repo, state: SyncState, flags: Record<string, Flags>, tip: string): Result {
   const head = git(repo.root, ['rev-parse', 'HEAD'])
   if (head !== state.checkpoint) throw new DriftError('HEAD moved since the sync started; abort and start again')
   const branch = tryGit(repo.root, ['symbolic-ref', '--short', 'HEAD']).out
@@ -427,7 +427,9 @@ function land(repo: Repo, state: SyncState, config: Config, flags: Record<string
   requireClean(repo)
   git(repo.root, ['reset', '--quiet', '--keep', tip])
   const logs = join(repo.stateDir, 'logs')
-  const steps = [config.build, config.install].filter((c): c is string => !!c)
+  // Build and install as the landed commit says, not as anything left in a worktree says.
+  const landed = readConfig(repo.root)
+  const steps = [landed.build, landed.install].filter((c): c is string => !!c)
   for (const [n, cmd] of steps.entries()) {
     const r = runShell(cmd, repo.root, join(logs, `land-${n}.log`))
     if (!r.ok) {
@@ -454,7 +456,7 @@ export function syncAccept(): Result {
   const state = requireState(repo)
   if (state.status !== 'held') throw new DriftError('no held sync to accept')
   const config = readConfig(state.worktree)
-  return land(repo, state, config, computeFlags(repo, state, config), git(repo.root, ['rev-parse', 'refs/drift/pending']))
+  return land(repo, state, computeFlags(repo, state, config), git(repo.root, ['rev-parse', 'refs/drift/pending']))
 }
 
 /** Always safe: the user's checkout is never touched before finish, so this only removes sync state. */

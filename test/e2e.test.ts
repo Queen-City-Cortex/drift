@@ -379,3 +379,21 @@ test('verify refuses uncommitted edits in the sync worktree', () => {
   assert.equal(v.code, 1)
   assert.match(v.json.error, /sync fixup/)
 })
+
+test('accept installs with the held commit config, not edits left in the worktree', () => {
+  const s = scenario()
+  initAndAdopt(s, 'build')
+  const start = drift(s.fork, ['sync', 'start', '--unattended'], s.env)
+  resolve(start.json.worktree)
+  drift(s.fork, ['sync', 'continue'], s.env)
+  drift(s.fork, ['verify'], s.env)
+  assert.equal(drift(s.fork, ['sync', 'finish'], s.env).code, 3)
+  const cfgPath = join(start.json.worktree, '.drift/config')
+  const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'))
+  cfg.install = `touch ${join(s.root, 'rogue')}`
+  writeFileSync(cfgPath, JSON.stringify(cfg))
+  const acc = drift(s.fork, ['sync', 'accept'], s.env)
+  assert.equal(acc.code, 0, JSON.stringify(acc.json))
+  assert.ok(!existsSync(join(s.root, 'rogue')))
+  assert.ok(existsSync(join(s.install, 'greet.js')))
+})
