@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
 import { resolveCurrent, runQueue, savePatch } from './apply.ts'
 import { type Config, readConfig, writeConfig } from './config.ts'
 import { runShell } from './exec.ts'
@@ -251,8 +251,7 @@ export function syncStart(o: StartOptions): Result {
   if (!o.to && !isAncestor(repo.root, base, to.sha)) throw new DriftError(`latest upstream ${to.ref} is not ahead of ${from.ref}`)
 
   const wt = worktreePath(repo, config)
-  tryGit(repo.root, ['worktree', 'remove', '--force', wt])
-  rmSync(wt, { recursive: true, force: true })
+  claimWorktree(repo, wt)
   git(repo.root, ['worktree', 'add', '--quiet', '--detach', wt, to.sha])
   const checkpoint = git(repo.root, ['rev-parse', 'HEAD'])
   git(repo.root, ['update-ref', 'refs/drift/checkpoint', checkpoint])
@@ -284,6 +283,18 @@ export function syncStart(o: StartOptions): Result {
   }
   saveState(repo, state)
   return queueResult(runQueue(repo, state))
+}
+
+/** Clears a stale sync worktree, refusing any path drift doesn't own. */
+function claimWorktree(repo: Repo, wt: string) {
+  const rel = relative(repo.root, wt)
+  if (!rel || (!rel.startsWith('..') && !isAbsolute(rel))) throw new DriftError(`worktree path ${wt} is inside the repo`)
+  if (!existsSync(wt)) return
+  const ours = git(repo.root, ['worktree', 'list', '--porcelain'])
+    .split('\n')
+    .some((l) => l === `worktree ${wt}`)
+  if (!ours) throw new DriftError(`worktree path ${wt} already exists and is not a drift worktree; move it or set worktree in config`)
+  git(repo.root, ['worktree', 'remove', '--force', wt])
 }
 
 function queueResult(r: ReturnType<typeof runQueue>): Result {
@@ -408,6 +419,8 @@ export function syncFinish(unattended: boolean): Result {
 function land(repo: Repo, state: SyncState, config: Config, flags: Record<string, Flags>, tip: string): Result {
   const head = git(repo.root, ['rev-parse', 'HEAD'])
   if (head !== state.checkpoint) throw new DriftError('HEAD moved since the sync started; abort and start again')
+  const branch = tryGit(repo.root, ['symbolic-ref', '--short', 'HEAD']).out
+  if (branch !== state.branch) throw new DriftError(`the sync started on ${state.branch || 'a detached HEAD'} but ${branch || 'a detached HEAD'} is checked out; switch back first`)
   requireClean(repo)
   git(repo.root, ['reset', '--quiet', '--keep', tip])
   const logs = join(repo.stateDir, 'logs')
@@ -415,12 +428,17 @@ function land(repo: Repo, state: SyncState, config: Config, flags: Record<string
   for (const [n, cmd] of steps.entries()) {
     const r = runShell(cmd, repo.root, join(logs, `land-${n}.log`))
     if (!r.ok) {
-      git(repo.root, ['reset', '--quiet', '--keep', state.checkpoint])
-      const old = readConfig(repo.root)
-      for (const [k, c] of [old.build, old.install].filter((c): c is string => !!c).entries()) runShell(c, repo.root, join(logs, `restore-${k}.log`))
-      const path = report(repo, state, 'install-failed', flags, {}, `\`${cmd}\` failed in ${repo.root}:\n\n\`\`\`\n${r.tail}\n\`\`\``)
+      // The checkout was clean before landing, so anything tracked that changed came from the landing commands.
+      const restored = tryGit(repo.root, ['reset', '--quiet', '--hard', state.checkpoint])
+      if (restored.ok) {
+        const old = readConfig(repo.root)
+        for (const [k, c] of [old.build, old.install].filter((c): c is string => !!c).entries()) runShell(c, repo.root, join(logs, `restore-${k}.log`))
+      }
+      let reason = `\`${cmd}\` failed in ${repo.root}:\n\n\`\`\`\n${r.tail}\n\`\`\``
+      if (!restored.ok) reason += `\n\nResetting to the checkpoint ${state.checkpoint} also failed:\n\n\`\`\`\n${restored.out}\n\`\`\``
+      const path = report(repo, state, 'install-failed', flags, {}, reason)
       cleanup(repo, state)
-      return { code: 1, json: { status: 'install-failed', command: cmd, tail: r.tail, report: path } }
+      return { code: 1, json: { status: 'install-failed', command: cmd, tail: r.tail, restored: restored.ok, report: path } }
     }
   }
   const path = report(repo, state, 'finished', flags, {})
